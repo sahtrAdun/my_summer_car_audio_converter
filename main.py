@@ -5,11 +5,21 @@ import shutil
 import zipfile
 import tempfile
 import urllib.request
+from tqdm import tqdm
 
+def download_progress_hook(count, block_size, total_size):
+    tqdm.write(f"\rDownloading: {count * block_size / (1024 * 1024):.2f} MB of {total_size / (1024 * 1024):.2f} MB", end="")
+
+def download_with_progress(url, output_path):
+    print(f"[INFO] Starting download from {url}")
+    with tqdm(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc="Downloading FFmpeg") as pbar:
+        def reporthook(count, blocksize, totalsize):
+            pbar.total = totalsize
+            pbar.update(blocksize)
+
+        urllib.request.urlretrieve(url, output_path, reporthook=reporthook)
 
 def install_ffmpeg():
-    print("[INFO] Checking for FFmpeg...")
-
     if ffmpeg_exists():
         print("[INFO] FFmpeg already installed.")
         ffmpeg_dir = os.path.join(os.getcwd(), "ffmpeg")
@@ -26,8 +36,7 @@ def install_ffmpeg():
         with tempfile.TemporaryDirectory() as tmpdir:
             zip_path = os.path.join(tmpdir, "ffmpeg.zip")
 
-            print("[INFO] Downloading ffmpeg...")
-            urllib.request.urlretrieve(ffmpeg_url, zip_path)
+            download_with_progress(ffmpeg_url, zip_path)
 
             print("[INFO] Unpacking ffmpeg...")
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -95,6 +104,13 @@ def main():
     os.makedirs(input_folder, exist_ok=True)
     os.makedirs(output_folder, exist_ok=True)
 
+    print(f"[INFO] Clearing '{output_folder}' folder...")
+    for f in os.listdir(output_folder):
+        file_path = os.path.join(output_folder, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    print(f"[INFO] '{output_folder}' folder cleared.")
+
     files = [f for f in os.listdir(input_folder) if os.path.isfile(os.path.join(input_folder, f))]
     print(f"[INFO] Found {len(files)} files in 'input' folder.")
     max_tracks = len(files)
@@ -116,6 +132,19 @@ def main():
             print(f"Error processing {filename}: {e}")
 
     print(f"\nTotal tracks processed: {count}")
+
+    try:
+        response = input("All tracks have been converted. Do you want to clear the 'input' folder? [y/N]: ").strip().lower()
+        if response in ('y', 'yes'):
+            for f in os.listdir(input_folder):
+                file_path = os.path.join(input_folder, f)
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            print("[INFO] 'input' folder has been cleared.")
+        else:
+            print("[INFO] 'input' folder will not be cleared.")
+    except Exception as e:
+        print(f"[ERROR] Could not clear input folder: {e}")
 
 
 if __name__ == "__main__":
